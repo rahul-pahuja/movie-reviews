@@ -1,10 +1,21 @@
 package com.movie.reviews.service;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.movie.reviews.entity.Movie;
+import com.movie.reviews.exception.BadRequestException;
+import com.movie.reviews.exception.ConflictException;
+import com.movie.reviews.exception.ResourceNotFoundException;
+import com.movie.reviews.projection.MovieProjection;
 import com.movie.reviews.repo.MoviesRepository;
 import com.movie.reviews.repo.UsersRepository;
+import com.movie.reviews.utils.ProjectConstants;
 
 @Service
 public class MovieReviewsServiceImpl implements MovieReviewsService {
@@ -16,27 +27,50 @@ public class MovieReviewsServiceImpl implements MovieReviewsService {
 	private MoviesRepository moviesRepository;
 
 	@Override
-	public String addUsers(String name) {
+	public Map<String, String> addUsers(String name) {
+
 		String userId = usersRepository.addUser(name);
-		return userId;
+
+		Map<String, String> response = new HashMap<String, String>();
+
+		response.put(ProjectConstants.MESSAGE, ProjectConstants.USER_ADDED_MESSAGE);
+		response.put(ProjectConstants.USER_ID, userId);
+
+		return response;
+
 	}
 
 	@Override
-	public String addMovie(String movieName, String movieGenre, String movieReleasedYear) {
+	public Map<String, String> addMovie(String movieName, String movieGenre, String movieReleasedYear) {
+
 		String movieId = moviesRepository.addMovie(movieName, movieReleasedYear, movieGenre);
-		return movieId;
+
+		Map<String, String> response = new HashMap<String, String>();
+
+		response.put(ProjectConstants.MESSAGE, ProjectConstants.MOVIE_ADDED_MESSAGE);
+		response.put(ProjectConstants.MOVIE_ID, movieId);
+
+		return response;
+
 	}
 
 	@Override
-	public void addReviews(String userId, String movieId, int score) {
+	public Map<String, String> addReview(String userId, String movieId, int score)
+			throws ConflictException, BadRequestException, ResourceNotFoundException {
 
-		if (1 > score || score > 10) {
-			throw new RuntimeException("send a valid review scores!");
+		Movie movie = moviesRepository.findByMovieId(movieId);
+
+		int currentYear = LocalDateTime.now().getYear();
+		int movieReleasedYear = Integer.parseInt(movie.getMovieReleasedYear());
+
+		if (currentYear <= movieReleasedYear) {
+			throw new BadRequestException(ProjectConstants.MOVIE_RELEASED_YEAR_MESSAGE);
 		}
 
 		boolean isAdded = usersRepository.addMovieReview(userId, movieId);
-		if (isAdded) {
-			throw new RuntimeException("user has already reviewed the movie!");
+
+		if (!isAdded) {
+			throw new ConflictException(ProjectConstants.ALREADY_REVIEWED_MOVIE_MESSAGE);
 		}
 
 		int userReviewedMovieCount = usersRepository.getMovieReviewedCountByUser(userId);
@@ -47,23 +81,53 @@ public class MovieReviewsServiceImpl implements MovieReviewsService {
 			moviesRepository.updateReviewScores(movieId, score);
 		}
 
+		Map<String, String> response = new HashMap<String, String>();
+
+		response.put(ProjectConstants.MESSAGE, ProjectConstants.REVIEW_ADDED_MESSAGE);
+
+		return response;
+
 	}
 
 	@Override
-	public void getMoviesByTotalCriticReviewScoresAndGenre(String genre, int size) {
+	public Map<String, List<MovieProjection>> getMoviesByTotalCriticReviewScoresAndGenre(String genre, int size) {
+
+		List<MovieProjection> movies = moviesRepository.getMoviesByTotalCriticReviewScoresAndGenre(genre, size);
+
+		Map<String, List<MovieProjection>> response = new HashMap<String, List<MovieProjection>>();
+
+		response.put(ProjectConstants.DATA, movies);
+
+		return response;
 
 	}
 
 	@Override
-	public float getAverageReviewScoresByYear(String movieYear) {
-		float averageReviewScores = moviesRepository.getAverageReviewScoresByYear(movieYear);
-		return averageReviewScores;
+	public Map<String, Object> getAverageReviewScoresByYear(String movieYear) throws ResourceNotFoundException {
+
+		float averageReviewScore = moviesRepository.getAverageReviewScoresByYear(movieYear);
+
+		Map<String, Object> response = new HashMap<String, Object>();
+
+		response.put(ProjectConstants.YEAR, movieYear);
+		response.put(ProjectConstants.AVERAGE_REVIEWS, averageReviewScore);
+
+		return response;
+
 	}
 
 	@Override
-	public float getAverageReviewScoresByMovie(String movieId) {
+	public Map<String, Object> getAverageReviewScoresByMovie(String movieId) throws ResourceNotFoundException {
+
 		float averageReviewScore = moviesRepository.getAverageReviewScoresByMovie(movieId);
-		return averageReviewScore;
+
+		Map<String, Object> response = new HashMap<String, Object>();
+
+		response.put(ProjectConstants.MOVIE_ID, movieId);
+		response.put(ProjectConstants.AVERAGE_REVIEWS, averageReviewScore);
+
+		return response;
+
 	}
 
 }

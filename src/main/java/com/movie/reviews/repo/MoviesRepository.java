@@ -10,7 +10,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Repository;
 
 import com.movie.reviews.entity.Movie;
+import com.movie.reviews.exception.BadRequestException;
+import com.movie.reviews.exception.ResourceNotFoundException;
 import com.movie.reviews.projection.MovieProjection;
+import com.movie.reviews.utils.ProjectConstants;
+
+class MovieProjectionComparator implements Comparator<MovieProjection> {
+	@Override
+	public int compare(MovieProjection m1, MovieProjection m2) {
+		return Float.compare(m2.getMovieAverageCriticReviews(), m1.getMovieAverageCriticReviews());
+	}
+}
 
 @Repository
 public class MoviesRepository {
@@ -20,7 +30,18 @@ public class MoviesRepository {
 	private final Map<String, Map<String, Integer>> yearGroupByIndex = new ConcurrentHashMap<String, Map<String, Integer>>();
 
 	private final static String TOTAL_REVIEWED_SCORES = "totalReviewedScores";
+
 	private final static String TOTAL_REVIEWED_BY = "totalReviewedBy";
+
+	public Movie findByMovieId(String movieId) throws BadRequestException, ResourceNotFoundException {
+
+		isMoviePresent(movieId);
+
+		Movie movie = movies.get(movieId);
+
+		return movie;
+
+	}
 
 	public String addMovie(String movieName, String movieReleasedYear, String movieGenre) {
 
@@ -31,6 +52,7 @@ public class MoviesRepository {
 		movie.setMovieGenre(movieGenre);
 
 		String movieId = UUID.randomUUID().toString();
+		movie.setMovieId(movieId);
 
 		movies.put(movieId, movie);
 
@@ -74,14 +96,14 @@ public class MoviesRepository {
 
 	}
 
-	public List<MovieProjection> getMoviesByTotalCriticReviewScoresAndGenre(String movieGenre, int size) {
+	public List<MovieProjection> getMoviesByTotalCriticReviewScoresAndGenre(String genre, int size) {
 
 		List<MovieProjection> movies = new ArrayList<MovieProjection>();
 
 		for (Movie movie : this.movies.values()) {
 
 			String currentMovieGenre = movie.getMovieGenre();
-			if (currentMovieGenre.equals(movieGenre)) {
+			if (currentMovieGenre.equals(genre)) {
 
 				int currentCriticReviewedScores = movie.getTotalCriticReviewedScores();
 				float averageCriticReviews;
@@ -99,22 +121,18 @@ public class MoviesRepository {
 			}
 		}
 
-		movies.sort(new Comparator<MovieProjection>() {
-			@Override
-			public int compare(MovieProjection m1, MovieProjection m2) {
-				return Float.compare(m2.getMovieAverageCriticReviews(), m1.getMovieAverageCriticReviews());
-			}
-		});
+		movies.sort(new MovieProjectionComparator());
 
 		if (movies.size() <= size) {
 			return movies;
 		}
-
 		return movies.subList(0, size);
 
 	}
 
-	public float getAverageReviewScoresByMovie(String movieId) {
+	public float getAverageReviewScoresByMovie(String movieId) throws ResourceNotFoundException {
+
+		isMoviePresent(movieId);
 
 		Movie movie = movies.get(movieId);
 
@@ -130,11 +148,10 @@ public class MoviesRepository {
 
 	}
 
-	public float getAverageReviewScoresByYear(String movieYear) {
+	public float getAverageReviewScoresByYear(String movieYear) throws ResourceNotFoundException {
 
-		boolean isYearPresent = yearGroupByIndex.containsKey(movieYear);
-		if (!isYearPresent) {
-			return 0.0f;
+		if (!yearGroupByIndex.containsKey(movieYear)) {
+			throw new ResourceNotFoundException(ProjectConstants.YEAR_NOT_FOUND_MESSAGE);
 		}
 
 		Map<String, Integer> reviews = yearGroupByIndex.get(movieYear);
@@ -147,13 +164,19 @@ public class MoviesRepository {
 
 	}
 
+	private void isMoviePresent(String movieId) throws ResourceNotFoundException {
+		if (!this.movies.containsKey(movieId)) {
+			throw new ResourceNotFoundException(ProjectConstants.MOVIE_NOT_FOUND_MESSAGE);
+		}
+	}
+
 	private void addMovieRatingToYearIndex(String movieYear, int reviewedScore, int reviewedBy) {
 
 		yearGroupByIndex.putIfAbsent(movieYear, new ConcurrentHashMap<String, Integer>());
 		Map<String, Integer> reviews = yearGroupByIndex.get(movieYear);
 
-		int currentTotalReviewedScores = reviews.get(TOTAL_REVIEWED_SCORES);
-		int currentTotalReviewedBy = reviews.get(TOTAL_REVIEWED_BY);
+		int currentTotalReviewedScores = reviews.getOrDefault(TOTAL_REVIEWED_SCORES, 0);
+		int currentTotalReviewedBy = reviews.getOrDefault(TOTAL_REVIEWED_BY, 0);
 
 		reviews.put(TOTAL_REVIEWED_SCORES, currentTotalReviewedScores + reviewedScore);
 		reviews.put(TOTAL_REVIEWED_BY, currentTotalReviewedBy + reviewedBy);

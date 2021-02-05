@@ -9,6 +9,9 @@ import java.util.concurrent.ConcurrentSkipListSet;
 import org.springframework.stereotype.Repository;
 
 import com.movie.reviews.entity.User;
+import com.movie.reviews.exception.BadRequestException;
+import com.movie.reviews.exception.ResourceNotFoundException;
+import com.movie.reviews.utils.ProjectConstants;
 
 @Repository
 public class UsersRepository {
@@ -27,7 +30,9 @@ public class UsersRepository {
 
 	}
 
-	public boolean addMovieReview(String userId, String movieId) {
+	public boolean addMovieReview(String userId, String movieId) throws BadRequestException, ResourceNotFoundException {
+
+		isuserPresent(userId);
 
 		User user = users.get(userId);
 
@@ -46,10 +51,16 @@ public class UsersRepository {
 
 		User user = users.get(userId);
 		Set<String> movieReviews = user.getMovieReviews();
-		int movieReviewsCount = movieReviews.size();
 
+		int movieReviewsCount = movieReviews.size();
 		return movieReviewsCount;
 
+	}
+
+	private void isuserPresent(String userId) throws ResourceNotFoundException {
+		if (!users.containsKey(userId)) {
+			throw new ResourceNotFoundException(ProjectConstants.USER_NOT_FOUND_MESSAGE);
+		}
 	}
 
 }
